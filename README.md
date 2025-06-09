@@ -47,6 +47,7 @@ Blocked keybinds:
 
 ### `/ropt reset <playerId>`
 Resets the player's vehicle.
+If `playerId` is not specified, everyone's vehicle will reset.
 
 ---
 
@@ -105,6 +106,7 @@ Sends 20 empty messages to clear the chat.
 
 ### `/ropt freeze <state> <playerId>`
 Freezes the player’s vehicle, preventing movement.
+If `playerId` is not specified, everyone's vehicle will freeze.
 
 ---
 
