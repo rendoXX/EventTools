@@ -14,7 +14,7 @@ Initial base taken from [@Neverless's RaceOptions script](https://github.com/Off
   - `disable`: Removes the limitation  
 - `playerId`: *(optional)* Used to target a specific player. If omitted, the command applies to everyone. Not all commands support this.  
 - `speed`: Speed in **km/h**  
-- `settime`: Time in format `HH:MM` (24h)  
+- `time`: Time in format `HH:MM` (24h)  
 
 > World Editor is always disabled.
 
@@ -115,7 +115,7 @@ Displays a list of all available `/ropt` commands.
 
 ---
 
-### `/ropt <settime>`
+### `/ropt settime <time>`
 Sets the time for all players.  
 Players can still change the time afterward unless `/ropt restr` is enabled.
 
