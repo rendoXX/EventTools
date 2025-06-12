@@ -6,7 +6,7 @@ Initial base taken from [@Neverless's RaceOptions script](https://github.com/Off
 ## SubCommand: `/ropt`
 
 ### Example Usage
-`/ropt restr state enable`
+`/ropt restr enable`
 
 
 - `state`: `enable` or `disable`  
