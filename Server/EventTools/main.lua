@@ -7,17 +7,19 @@ local votes = {}
 local votedPlayers = {}
 M.Admins = {"admin1", "admin2"}
 M.Commands = {}
-M.state = {}
-M.state.IsRestrictionsEnabled = false
-M.state.IsEnabledCfgOld = false
-M.state.IsEnabledCfg = false
-M.state.IsAdminException = false
-M.state.IsSpeedLimitation = false
-M.state.SpeedLimitValue = 0
-M.state.CurrentTime = "No time set"
-M.state.IsBeamLingBlocked = false
-M.state.IsFrozen = false
-M.IsEnabledVehicleSelector = false
+M.state = {
+	IsRestrictionsEnabled = false,
+	CompmodeEnabled = false,
+	BlockPartConfigurator = false,
+	AdminException = false,
+	SpeedLimitation = false,
+	SpeedLimitValue = 0,
+	CurrentTime = "No time set",
+	BeamLingBlocked = false,
+	IsFrozen = false,
+	BlockVehicleSelector = false
+}
+
 
 ---------------------------------------------------------------------------------------------
 -- Basics
@@ -41,19 +43,8 @@ local function tableSize(table)
 	return len
 end
 
-local function sleep(seconds)
-	MP.Sleep(math.floor(seconds * 1000))
-end
-
 ---------------------------------------------------------------------------------------------
--- MP Overwrites
---[[ onPlayerJoin based
-	Format
-		[players] = table
-			["player_id"] = table
-				[is_synced] = bool
-				[buffer] = table -- unused
-]]
+-- MP Stuff
 local TriggerClientEvent = {}
 TriggerClientEvent.players = {}
 
@@ -83,7 +74,7 @@ function TriggerClientEvent:send(player_id, event_name, event_data)
 
 	for _, id in pairs(send_to) do
 		local player_name = MP.GetPlayerName(id)
-		if M.state.IsAdminException and M.Admins[player_name] then
+		if M.state.AdminException and M.Admins[player_name] then
 		else
 			if not self:is_synced(id) then
 				print(player_name .. " is not ready yet to receive event data")
@@ -146,7 +137,13 @@ end
 
 -- /ropt command
 -- or
--- /ropt command player_id
+-- /ropt command status
+-- or
+-- /ropt command value
+-- or
+-- /ropt command status player_id
+-- or
+-- -vote username
 
 function handleVoteCommand(player_id, player_name, message)
     if message:sub(1, 5) ~= "-vote" then return false end
@@ -257,17 +254,17 @@ function setStates(player_id)
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disableCompetitiveMode")
 	end
-	if M.state.IsEnabledCfgOld then
+	if M.state.CompmodeEnabled then
 		TriggerClientEvent:send(player_id, "restrictions_enablePartSelectorOld")
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disablePartSelectorOld")
 	end
-	if M.state.IsEnabledCfg then
+	if M.state.BlockPartConfigurator then
 		TriggerClientEvent:send(player_id, "restrictions_enablePartSelector")
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disablePartSelector")
 	end
-	if M.state.IsSpeedLimitation then
+	if M.state.SpeedLimitation then
 		TriggerClientEvent:send(player_id, "restrictions_enableSpeedLimit")
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disableSpeedLimit")
@@ -281,7 +278,7 @@ function setStates(player_id)
 	else
 		TriggerClientEvent:send(player_id, "restrictions_freezeVehicleDisable")
 	end
-	if M.state.IsEnabledVehicleSelector then
+	if M.state.BlockVehicleSelector then
 		TriggerClientEvent:send(player_id, "restrictions_enableVehicleSelector")
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disableVehicleSelector")
@@ -299,9 +296,9 @@ end
 
 function onVehicleSpawn(player_id, vehicle_id, vehicle_data)
 	setStates(player_id)
-	if M.state.IsBeamLingBlocked then
+	if M.state.BeamLingBlocked then
 		local player_name = MP.GetPlayerName(player_id)
-		if M.state.IsAdminException and M.Admins[player_name] then return end
+		if M.state.AdminException and M.Admins[player_name] then return end
 		if isUnicycle(vehicle_data) then
 			SendChatMessage(player_id, 'Unicycles are disabled!')
 			return 1 -- deny spawn
@@ -310,9 +307,9 @@ function onVehicleSpawn(player_id, vehicle_id, vehicle_data)
 end
 
 function onVehicleEdited(player_id, vehicle_id, vehicle_data)
-	if M.state.IsBeamLingBlocked then
+	if M.state.BeamLingBlocked then
 		local player_name = MP.GetPlayerName(player_id)
-		if M.state.IsAdminException and M.Admins[player_name] then return end
+		if M.state.AdminException and M.Admins[player_name] then return end
 		if isUnicycle(vehicle_data) then
 			SendChatMessage(player_id, 'Unicycles are disabled!')
 			MP.RemoveVehicle(player_id, vehicle_id)
@@ -322,7 +319,7 @@ end
 
 function removeUnicycle()
 	for player_id, player_name in pairs(MP.GetPlayers() or {}) do
-		if M.state.IsAdminException and M.Admins[player_name] then
+		if M.state.AdminException and M.Admins[player_name] then
 			-- skip this admin player
 		else
 			for vehicle_id, vehicle_data in pairs(MP.GetPlayerVehicles(player_id) or {}) do
@@ -383,20 +380,20 @@ end
 
 M.Commands.compmode = function(data)
 	if data.state == "enable" then
-		M.state.IsEnabledCfgOld = true
+		M.state.CompmodeEnabled = true
 		TriggerClientEvent:send(-1, "restrictions_enablePartSelectorOld")
 	elseif data.state == "disable" then
-		M.state.IsEnabledCfgOld = false
+		M.state.CompmodeEnabled = false
 		TriggerClientEvent:send(-1, "restrictions_disablePartSelectorOld")
 	end
 end
 
 M.Commands.pcfg = function(data)
 	if data.state == "enable" then
-		M.state.IsEnabledCfg = true
+		M.state.BlockPartConfigurator = true
 		TriggerClientEvent:send(-1, "restrictions_enablePartSelector")
 	elseif data.state == "disable" then
-		M.state.IsEnabledCfg = false
+		M.state.BlockPartConfigurator = false
 		TriggerClientEvent:send(-1, "restrictions_disablePartSelector")
 	end
 end
@@ -409,17 +406,17 @@ M.Commands.status = function(data)
 end
 
 M.Commands.adminx = function(data)
-	M.state.IsAdminException = not M.state.IsAdminException
-	local state = tostring(M.state.IsAdminException)
+	M.state.AdminException = not M.state.AdminException
+	local state = tostring(M.state.AdminException)
 	SendChatMessage(data.from_playerid, "Admin exception state set to: " .. state)
 end
 
 M.Commands.sl = function(data)
 	if data.state == "enable" then
-		M.state.IsSpeedLimitation = true
+		M.state.SpeedLimitation = true
 		TriggerClientEvent:send(-1, "restrictions_enableSpeedLimit")
 	elseif data.state == "disable" then
-		M.state.IsSpeedLimitation = false
+		M.state.SpeedLimitation = false
 		TriggerClientEvent:send(-1, "restrictions_disableSpeedLimit")
 	end
 end
@@ -436,10 +433,10 @@ end
 
 M.Commands.nowalk = function(data)
 	if data.state == "enable" then
-		M.state.IsBeamLingBlocked = true
+		M.state.BeamLingBlocked = true
 		removeUnicycle()
 	elseif data.state == "disable" then
-		M.state.IsBeamLingBlocked = false
+		M.state.BeamLingBlocked = false
 		removeUnicycle()
 	end
 end
@@ -460,10 +457,10 @@ end
 
 M.Commands.vsel = function(data)
 	if data.state == "enable" then
-		M.state.IsEnabledVehicleSelector = true
+		M.state.BlockVehicleSelector = true
 		TriggerClientEvent:send(-1, "restrictions_enableVehicleSelector")
 	elseif data.state == "disable" then
-		M.state.IsEnabledVehicleSelector = false
+		M.state.BlockVehicleSelector = false
 		TriggerClientEvent:send(-1, "restrictions_disableVehicleSelector")
 	end
 end
