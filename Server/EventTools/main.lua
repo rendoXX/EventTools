@@ -5,7 +5,9 @@ local speed = 0
 local time = {}
 local votes = {}
 local votedPlayers = {}
-M.Admins = {"admin1", "admin2"}
+local lastDisconnected
+M.activeTags = {}
+M.Admins = {"Admin1", "Admin2"}
 M.Commands = {}
 M.state = {
 	IsRestrictionsEnabled = false,
@@ -17,7 +19,15 @@ M.state = {
 	CurrentTime = "No time set",
 	BeamLingBlocked = false,
 	IsFrozen = false,
-	BlockVehicleSelector = false
+	BlockVehicleSelector = false,
+	HideNames = false
+}
+
+-- Make sure that the person is in the M.Admins list!
+M.roles = {
+	Owner = {"Admin1"},
+	Admin = {},
+	Moderator = {"Admin2"}
 }
 
 
@@ -74,10 +84,11 @@ function TriggerClientEvent:send(player_id, event_name, event_data)
 
 	for _, id in pairs(send_to) do
 		local player_name = MP.GetPlayerName(id)
-		if M.state.AdminException and M.Admins[player_name] then
+		if M.state.AdminException and M.Admins[player_name] and event_name ~= "restrictions_setTag" and event_name ~= "restrictions_setprefix" and event_name ~= "restrictions_setsuffix" then
 		else
-			if not self:is_synced(id) then
+			if not self:is_synced(id) and id ~= lastDisconnected then
 				print(player_name .. " is not ready yet to receive event data")
+			elseif id == lastDisconnected then
 			else
 				if type(event_data) == "table" then
 					event_data = Util.JsonEncode(event_data)
@@ -127,6 +138,30 @@ function isAdmin(playerId)
 		end
 	end
 	return false
+end
+
+function isAdminById(player_id)
+	local name = MP.GetPlayerName(player_id)
+	if not name then return false end
+	return M.Admins[name] == true
+end
+
+function isAdminByName(name)
+	if M.Admins[name] then
+		return true
+	end
+	return false
+end
+
+local function getPlayerRole(playerName)
+	for role, list in pairs(M.roles) do
+		for _, name in ipairs(list) do
+			if name:lower() == playerName:lower() then
+				return role
+			end
+		end
+	end
+	return nil
 end
 
 ---------------------------------------------------------------------------------------------
@@ -217,11 +252,26 @@ function onChatMessage(player_id, player_name, message, is_console)
 			return 1
 		end
 		M.Commands[cmd]({speed = speed, from_playerid = player_id})
-	elseif cmd == "clearchat" or cmd == "results" or cmd == "clearvotes" then
+	elseif cmd == "clearchat" or cmd == "results" or cmd == "clearvotes" or cmd == "togglenames" then
 		M.Commands[cmd]({from_playerid = player_id})
 	elseif cmd == "reset" or cmd == "flip" then
 		local target_id = tonumber(message[2]) or -1
 		M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id})
+	elseif cmd == "cleartags" then
+		local target_id = tonumber(message[2]) or nil
+		if not target_id or target_id and target_id < 0 then
+			SendChatMessage(player_id, "Usage: /ropt cleartags playerId")
+			return 1
+		end
+		M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id})
+	elseif cmd == "popup" then
+		local target_id = tonumber(message[2]) or nil
+		local text = table.concat(message, " ", 3)
+		if not text or text == "" or not target_id then
+			SendChatMessage(player_id, "Usage: /ropt popup playerId message")
+			return 1
+		end
+		M.Commands[cmd]({to_playerid = target_id, from_playername = player_name, text = text})
 	elseif cmd == "freeze" then
 		local target_state = (message[2] and message[2]:lower()) or nil
 		local target_id = tonumber(message[3]) or -1
@@ -237,6 +287,24 @@ function onChatMessage(player_id, player_name, message, is_console)
 			return 1
 		end
 		M.Commands[cmd]({time = target_time, from_playerid = player_id})
+	elseif cmd == "setsuffix" or cmd == "setprefix" then
+		local target_id = tonumber(message[2]) or nil
+		local tag = (message[3]) or nil
+		local r = tonumber(message[4]) or nil
+		local g = tonumber(message[5]) or nil
+		local b = tonumber(message[6]) or nil
+		if (not target_id or not tag or r and not g) or (r and r > 255 or g and g > 255 or b and b > 255) then
+			SendChatMessage(player_id, "Usage: /ropt command playerId Tag r g b (r,g,b are color codes and are optional)")
+			return 1
+		elseif (cmd == "setprefix" and isAdminById(target_id)) or (cmd == "setsuffix" and r and g and b and isAdminById(target_id)) then
+			SendChatMessage(player_id, "Administrators are not allowed to use this command on themselves or on any other administrator. You may only use /ropt setsuffix playerId tag (without color codes).")
+			return 1
+		end
+		if r and g and b then
+			M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id, tag = tag, rgb = 1, r=r,g=g,b=b})
+		else
+			M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id, tag = tag, rgb = 0})
+		end
 	else
 		local target_state = (message[2] and message[2]:lower()) or nil
 		if cmd ~= "adminx" and cmd ~= "status" and target_state ~= "disable" and target_state ~= "enable" then
@@ -283,26 +351,78 @@ function setStates(player_id)
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disableVehicleSelector")
 	end
+	if M.state.HideNames then
+		TriggerClientEvent:send(player_id, "restrictions_toggleNames", tostring(M.state.HideNames))
+	else
+		TriggerClientEvent:send(player_id, "restrictions_toggleNames", tostring(M.state.HideNames))
+	end
+end
+
+function setTag(player_id, state)
+	for id, name in pairs(MP.GetPlayers()) do
+		if M.Admins[name] then
+			local role = getPlayerRole(name)
+			if role then
+				local data = id .. "|" .. role .. "|" .. state
+				TriggerClientEvent:send(player_id, "restrictions_setTag", data)
+			end
+		end
+	end
 end
 
 function onPlayerJoin(player_id)
-	TriggerClientEvent:set_synced(player_id)
-	setStates(player_id)
+    TriggerClientEvent:set_synced(player_id)
+    setStates(player_id)
+
+	setTag(player_id, 0)
+
+	-- Apply tags if they exist
+	for name, tags in pairs(M.activeTags) do
+		if tags.prefix then
+			local p = tags.prefix
+			if p.rgb == 1 then
+				local payload = p.tag .. "|" .. p.rgb .. "|" .. p.playerid .. "|" .. p.r .. "|" .. p.g .. "|" .. p.b
+				TriggerClientEvent:send(-1, "restrictions_setprefix", payload)
+			else
+				local payload = p.tag .. "|" .. p.rgb .. "|" .. p.name
+				TriggerClientEvent:send(-1, "restrictions_setprefix", payload)
+			end
+		end
+
+		if tags.suffix then
+			local s = tags.suffix
+			local payload = s.rgb == 1 and (s.tag .. "|" .. s.rgb .. "|" .. s.playerid .. "|" .. s.r .. "|" .. s.g .. "|" .. s.b) or (s.tag .. "|" .. s.rgb .. "|" .. s.name)
+			TriggerClientEvent:send(player_id, "restrictions_setsuffix", payload)
+		end
+	end
+
 end
 
 function onPlayerDisconnect(player_id)
 	TriggerClientEvent:remove(player_id)
+	local name = MP.GetPlayerName(player_id)
+
+	if M.activeTags and M.activeTags[name] then
+		M.activeTags[name] = nil
+	end
+
+	lastDisconnected = player_id
+	TriggerClientEvent:send(-1, "restrictions_cleartag", name)
 end
 
 function onVehicleSpawn(player_id, vehicle_id, vehicle_data)
 	setStates(player_id)
+	local player_name = MP.GetPlayerName(player_id)
 	if M.state.BeamLingBlocked then
-		local player_name = MP.GetPlayerName(player_id)
 		if M.state.AdminException and M.Admins[player_name] then return end
 		if isUnicycle(vehicle_data) then
 			SendChatMessage(player_id, 'Unicycles are disabled!')
 			return 1 -- deny spawn
 		end
+	end
+		
+	if isAdminByName(player_name) then
+		setTag(-1, 1)
 	end
 end
 
@@ -520,4 +640,102 @@ M.Commands.clearvotes = function(data)
 	votes = {}
 	votedPlayers = {}
 	SendChatMessage(data.from_playerid, "Votes have been cleared.")
+end
+
+-- M.Commands.settag = function(data)
+-- 	setTag(data.to_playerid)
+-- end
+
+M.Commands.setsuffix = function(data)
+	local player_name = MP.GetPlayerName(data.to_playerid)
+	M.activeTags[player_name] = M.activeTags[player_name] or {}
+
+	local currentSuffix = M.activeTags[player_name].suffix
+
+	-- If tag is already set, block switching between rgb types
+	if currentSuffix and currentSuffix.rgb ~= data.rgb then
+		SendChatMessage(data.from_playerid, "Cannot switch between RGB and non-RGB suffix for player: " .. player_name)
+		return
+	end
+
+	if data.rgb == 1 then
+		M.activeTags[player_name].suffix = {
+			tag = data.tag,
+			rgb = 1,
+			playerid = data.to_playerid,
+			r = data.r,
+			g = data.g,
+			b = data.b
+		}
+		local payload = data.tag .. "|" .. data.rgb .. "|" .. data.to_playerid .. "|" .. data.r .. "|" .. data.g .. "|" .. data.b
+		TriggerClientEvent:send(-1, "restrictions_setsuffix", payload)
+	else
+		M.activeTags[player_name].suffix = {
+			tag = data.tag,
+			rgb = 0,
+			name = player_name
+		}
+		local payload = data.tag .. "|" .. data.rgb .. "|" .. player_name
+		TriggerClientEvent:send(-1, "restrictions_setsuffix", payload)
+	end
+end
+
+
+M.Commands.setprefix = function(data)
+	local player_name = MP.GetPlayerName(data.to_playerid)
+	M.activeTags[player_name] = M.activeTags[player_name] or {}
+
+	local currentPrefix = M.activeTags[player_name].prefix
+	local currentSuffix = M.activeTags[player_name].suffix
+
+	if currentPrefix and currentPrefix.rgb ~= data.rgb then
+		SendChatMessage(data.from_playerid, "Cannot switch between RGB and non-RGB prefix for player: " .. player_name)
+		return
+	end
+
+	-- Block RGB prefix if RGB suffix is already set
+	if data.rgb == 1 and currentSuffix and currentSuffix.rgb == 1 then
+		SendChatMessage(data.from_playerid, "Cannot set RGB prefix because RGB suffix is already set for player: " .. player_name)
+		return
+	end
+
+	if data.rgb == 1 then
+		M.activeTags[player_name].prefix = {
+			tag = data.tag,
+			rgb = 1,
+			playerid = data.to_playerid,
+			r = data.r,
+			g = data.g,
+			b = data.b
+		}
+		local payload = data.tag .. "|" .. data.rgb .. "|" .. data.to_playerid .. "|" .. data.r .. "|" .. data.g .. "|" .. data.b
+		TriggerClientEvent:send(-1, "restrictions_setprefix", payload)
+	else
+		M.activeTags[player_name].prefix = {
+			tag = data.tag,
+			rgb = 0,
+			name = player_name
+		}
+		local payload = data.tag .. "|" .. data.rgb .. "|" .. player_name
+		TriggerClientEvent:send(-1, "restrictions_setprefix", payload)
+	end
+end
+
+M.Commands.cleartags = function(data)
+	local player_name = MP.GetPlayerName(data.to_playerid)
+	TriggerClientEvent:send(-1, "restrictions_cleartag", player_name)
+	M.activeTags[player_name] = nil
+end
+
+M.Commands.togglenames = function(data)
+	M.state.HideNames = not M.state.HideNames
+	local state = tostring(M.state.HideNames)
+	TriggerClientEvent:send(-1, "restrictions_toggleNames", state)
+	SendChatMessage(data.from_playerid, "Hide Names state set to: " .. state)
+end
+
+M.Commands.popup = function(data)
+	TriggerClientEvent:send(data.to_playerid, "restrictions_popup", data.text)
+	local player_name = MP.GetPlayerName(data.to_playerid)
+	print(data.from_playername .. " sent a popup window to " .. player_name .. " with the message: " .. data.text)
 end

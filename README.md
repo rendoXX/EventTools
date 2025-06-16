@@ -135,3 +135,48 @@ Clears all existing votes.
 
 ### `-vote <username>`
 Vote for a specific player.
+
+### `/ropt togglenames`
+Hides or shows player usernames for everyone.
+
+This setting overrides the in-game "Show Player Names" checkbox.  
+Rejoining or changing settings will not bypass this unless the player knows how to use the console and some BeamMP code.
+
+---
+
+### `/ropt popup <playerId> <text>`
+Displays a popup window on the selected player's screen with your message and an “OK” button.
+
+- `text` can contain spaces.
+- Popup messages are logged in the server console with sender, receiver, and message content.
+
+---
+
+### `/ropt setprefix <playerId> <Tag> [r] [g] [b]`
+Sets a tag before the username of a player.
+
+- `Tag` must not contain spaces.
+- `[r] [g] [b]` are optional RGB values.
+
+**Rules:**
+- Administrators cannot use RGB on themselves or other admins. You may only use `/ropt setsuffix playerId tag` (no RGB).
+- You cannot switch between RGB and non-RGB tags for the same type (prefix/suffix).
+- You cannot set an RGB prefix if the player already has an RGB suffix.
+
+---
+
+### `/ropt setsuffix <playerId> <Tag> [r] [g] [b]`
+Sets a tag after the username of a player.
+
+- Same syntax and restrictions as `/ropt setprefix`.
+
+---
+
+## Staff Tags System
+
+This system automatically assigns a colored client-side tag for all staff members when they spawn a vehicle.
+
+Staff roles:
+- Moderator
+- Administrator
+- Owner

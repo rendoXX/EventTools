@@ -8,9 +8,32 @@ local vehicleSelectorUICheckState = false
 local speedLimitStatus = false
 local lastSpeedLimit = 0
 local freezeState = false
+local toggleNames = false
+local adminTagQueue = false
+local adminTagData
+
+local roleDisplayNames = {
+	Owner = "Owner",
+	Admin = "Administrator",
+	Moderator = "Moderator"
+}
+local roleStyles = {
+	Owner =       { back = {r=36, g=112, b=255},  fore = {r=255, g=255, b=255} },
+	Admin =       { back = {r=14, g=75, b=239},  fore = {r=255, g=255, b=255} },
+	Moderator =   { back = {r=108, g=71, b=228}, fore = {r=255, g=255, b=255} }
+}
 
 -- ----------------------------------------------------------------------------
 -- Common
+local function splitString(inputstr)
+    local t = {}
+    for str in string.gmatch(inputstr, "([^|]+)") do
+        table.insert(t, str)
+    end
+    return t
+end
+
+
 local function isBeamMPSession()
 	if MPCoreNetwork then return MPCoreNetwork.isMPSession() end
 	return false
@@ -152,6 +175,134 @@ M.setTimeOfTheDay = function(data)
 	end
 end
 
+local function setAdminTags()
+	local playerId = tonumber(adminTagData[1])
+	local role = adminTagData[2]
+
+	local displayName = roleDisplayNames[role]
+	local style = roleStyles[role]
+	if not displayName or not style then
+		print("Missing role info")
+		return
+	end
+
+	local p = MPVehicleGE.getPlayers()[playerId]
+	if p then
+		p.nickPrefixes = { "[" .. displayName .. "] " }
+		p:setCustomRole({
+			backcolor = style.back,
+			forecolor = style.fore,
+			tag = "",
+			shorttag = ""
+		})
+	else
+		print("No player found for ID: " .. tostring(playerId))
+	end
+end
+
+M.setTag = function(data)
+	adminTagData = splitString(data)
+	dump(adminTagData)
+	local state = tonumber(adminTagData[3])
+	if state == 1 then
+		adminTagQueue = true
+	else
+		setAdminTags()
+	end
+end
+
+M.toggleNames = function(data)
+	if data == "true" and not toggleNames then
+		MPVehicleGE.toggleNicknames()
+		toggleNames = true
+		print("Nametags hidden")
+	elseif data == "false" and toggleNames then
+		MPVehicleGE.toggleNicknames()
+		toggleNames = false
+		print("Nametags not hidden")
+	end
+end
+
+
+M.setsuffix = function(data)
+	local a = splitString(data)
+
+	local tag = a[1]
+	if tonumber(a[2]) == 1 then
+		local r = tonumber(a[4])
+		local g = tonumber(a[5])
+		local b = tonumber(a[6])
+		local player = tonumber(a[3])
+		MPVehicleGE.setPlayerRole(player, tag, "", r, g, b)
+	else
+		local player = a[3]
+		MPVehicleGE.setPlayerNickSuffix(player, "EventTools", " [" .. tag .. "]")
+	end
+end
+
+M.setprefix = function(data)
+	local a = splitString(data)
+
+	local tag = a[1]
+	if tonumber(a[2]) == 1 then
+		local player = tonumber(a[3])
+		local p = MPVehicleGE.getPlayers()[player]
+		local r = tonumber(a[4])
+		local g = tonumber(a[5])
+		local b = tonumber(a[6])
+		if p then
+			p.nickPrefixes = { "[" .. tag .. "] " }
+			p:setCustomRole({
+				backcolor = {r=r, g=g, b=b},
+				forecolor = {r=255, g=255, b=255},
+				tag = "",
+				shorttag = ""
+			})
+		end
+	else
+		local player = a[3]
+		MPVehicleGE.setPlayerNickPrefix(player, "EventTools", "[" .. tag .. "]")
+	end
+end
+
+M.cleartag = function(data)
+	local playerName = data
+	if not playerName then return end
+
+	local player = MPVehicleGE.getPlayerByName(playerName)
+	local playerId = player and player.playerID or nil
+
+	MPVehicleGE.setPlayerNickSuffix(playerName, "EventTools", "")
+	MPVehicleGE.setPlayerNickPrefix(playerName, "EventTools", "")
+
+	if playerId then
+		MPVehicleGE.clearPlayerRole(playerId)
+		local p = MPVehicleGE.getPlayers()[playerId]
+		if p then
+			p.nickPrefixes = { "" }
+		end
+	else
+		-- Fallback if the player is not spawned yet
+		for _, playerData in pairs(MPVehicleGE.getPlayers()) do
+			if playerData.name == playerName then
+				playerData.nickPrefixes = { "" }
+				playerData:setCustomRole({
+					backcolor = { r = 000, g = 000, b = 000 },
+					forecolor = { r = 255, g = 255, b = 255 },
+					tag = "",
+					shorttag = ""
+				})
+			end
+		end
+	end
+end
+
+
+M.popup = function(data)
+	guihooks.trigger('ConfirmationDialogOpen', "Message", data, "OK", "guihooks.trigger('ConfirmationDialogClose', 'Message')")
+end
+
+
 -- ----------------------------------------------------------------------------
 -- Game Events
 M.onUpdate = function(dt)
@@ -178,6 +329,14 @@ M.onUiChangedState = function(new, old)
 		guihooks.trigger("ChangeState", "play")
 	end
 end
+
+M.onVehicleSpawned = function(vehId)
+	if adminTagQueue then
+		setAdminTags()
+		adminTagQueue = false
+	end
+end
+
 
 M.onVehicleResetted = function()
 	if speedLimitStatus then
@@ -210,6 +369,12 @@ M.onClientPostStartMission = function()
 		AddEventHandler("restrictions_enableVehicleSelector", M.enableVehicleSelector)
 		AddEventHandler("restrictions_disableVehicleSelector", M.disableVehicleSelector)
 		AddEventHandler("restrictions_setTimeOfTheDay", M.setTimeOfTheDay)
+		AddEventHandler("restrictions_setTag", M.setTag)
+		AddEventHandler("restrictions_setsuffix", M.setsuffix)
+		AddEventHandler("restrictions_setprefix", M.setprefix)
+		AddEventHandler("restrictions_cleartag", M.cleartag)
+		AddEventHandler("restrictions_toggleNames", M.toggleNames)
+		AddEventHandler("restrictions_popup", M.popup)
 	else
 		M.onUpdate = nil
 	end
