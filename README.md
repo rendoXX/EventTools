@@ -131,11 +131,6 @@ Clears all existing votes.
 
 ---
 
-## Commands Available to All Players
-
-### `-vote <username>`
-Vote for a specific player.
-
 ### `/ropt togglenames`
 Hides or shows player usernames for everyone.
 
@@ -180,3 +175,10 @@ Staff roles:
 - Moderator
 - Administrator
 - Owner
+
+---
+
+## Commands Available to All Players
+
+### `-vote <username>`
+Vote for a specific player.
