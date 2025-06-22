@@ -6,8 +6,9 @@ local time = {}
 local votes = {}
 local votedPlayers = {}
 local lastDisconnected
+local adminDataPath = "Resources/Server/EventTools/admins_data.json"
 M.activeTags = {}
-M.Admins = {"Admin1", "Admin2"}
+M.Admins = {"Admin1", "Admin2", "Admin3", "Admin4"}
 M.Commands = {}
 M.state = {
 	IsRestrictionsEnabled = false,
@@ -22,14 +23,21 @@ M.state = {
 	BlockVehicleSelector = false,
 	HideNames = false
 }
-
--- Make sure that the person is in the M.Admins list!
-M.roles = {
+M.roles = { -- The player should be added to M.Admins first
 	Owner = {"Admin1"},
 	Admin = {},
-	Moderator = {"Admin2"}
+	Moderator = {"Admin2"},
+	EventManager = {"Admin3", "Admin4"}
 }
 
+local roleHierarchy = {
+	EventManager = 1,
+	Moderator = 2,
+	Admin = 3,
+	Owner = 4
+}
+
+M.privilegedEventManagers = {"Admin4"} -- The player should be added to M.Admins first
 
 ---------------------------------------------------------------------------------------------
 -- Basics
@@ -51,6 +59,13 @@ local function tableSize(table)
 		len = len + 1
 	end
 	return len
+end
+
+function table.contains(tbl, val)
+	for _, v in ipairs(tbl) do
+		if v == val then return true end
+	end
+	return false
 end
 
 ---------------------------------------------------------------------------------------------
@@ -164,10 +179,117 @@ local function getPlayerRole(playerName)
 	return nil
 end
 
+function getPlayerIdByName(name)
+    for _, id in pairs(MP.GetPlayers()) do
+        if MP.GetPlayerName(id) == name then
+            return id
+        end
+    end
+    return nil
+end
+
+-- local function loadAdmins()
+-- 	local handle = io.open(adminDataPath, "r")
+-- 	if handle then
+-- 		local content = handle:read("*all")
+-- 		handle:close()
+-- 		local decoded = Util.JsonDecode(content)
+-- 		if decoded then
+-- 			M.Admins = decoded.admins or {}
+-- 			M.roles = decoded.roles or {}
+-- 			M.privilegedEventManagers = decoded.privilegedEventManagers or {}
+
+-- 			return true
+-- 		end
+-- 	end
+-- 	return false
+-- end
+
+local function loadAdmins()
+	local handle = io.open(adminDataPath, "r")
+	if handle then
+		local content = handle:read("*all")
+		handle:close()
+		local decoded = Util.JsonDecode(content)
+		if decoded then
+			-- Merge decoded admins into existing hardcoded M.Admins list
+			for _, name in ipairs(decoded.admins or {}) do
+				if not table.contains(M.Admins, name) then
+					table.insert(M.Admins, name)
+				end
+			end
+
+			-- Merge roles
+			for role, names in pairs(decoded.roles or {}) do
+				M.roles[role] = M.roles[role] or {}
+				for _, name in ipairs(names) do
+					if not table.contains(M.roles[role], name) then
+						table.insert(M.roles[role], name)
+					end
+				end
+			end
+
+			-- Merge privilegedEventManagers
+			for _, name in ipairs(decoded.privilegedEventManagers or {}) do
+				if not table.contains(M.privilegedEventManagers, name) then
+					table.insert(M.privilegedEventManagers, name)
+				end
+			end
+
+			return true
+		end
+	end
+	return false
+end
+
+
+local function saveAdmins()
+	local adminsList = {}
+	local privilegedList = {}
+
+	-- Convert M.Admins to list
+	if #M.Admins > 0 then
+		adminsList = M.Admins
+	else
+		for name, _ in pairs(M.Admins) do
+			table.insert(adminsList, name)
+		end
+	end
+
+	-- Convert M.privilegedEventManagers to list
+	if #M.privilegedEventManagers > 0 then
+		privilegedList = M.privilegedEventManagers
+	else
+		for name, _ in pairs(M.privilegedEventManagers) do
+			table.insert(privilegedList, name)
+		end
+	end
+
+	local data = {
+		admins = adminsList,
+		roles = M.roles,
+		privilegedEventManagers = privilegedList
+	}
+
+	local jsonString = Util.JsonEncode(data)
+	if jsonString and type(jsonString) == "string" then
+		local handle = io.open(adminDataPath, "w")
+		if handle then
+			handle:write(jsonString)
+			handle:close()
+		else
+			print("[ERROR] Failed to open admin JSON file for writing")
+		end
+	else
+		print("[ERROR] Failed to encode admin data to JSON")
+	end
+end
+
 ---------------------------------------------------------------------------------------------
 -- Events
 function onConsoleInput(cmd)
 	onChatMessage(-2, "", cmd, true)
+	return ""
 end
 
 -- /ropt command
@@ -186,21 +308,21 @@ function handleVoteCommand(player_id, player_name, message)
 
     -- Check if second argument (the target player name) is missing
     if not args[1] then
-        SendChatMessage(player_id, "Usage: -vote <playername>")
+        SendChatMessage(player_id, "Usage: -vote PlayerName")
         return true
     end
 
-    local target_name = args[1]:lower()
+    local target_name = args[1]
     local target_exists = false
 
     for id, name in pairs(MP.GetPlayers()) do
-        if name:lower() == target_name then
+        if name == target_name then
             target_exists = true
             break
         end
     end
 
-    if player_name:lower() == target_name then
+    if player_name == target_name then
         SendChatMessage(player_id, "You can't vote for yourself, silly.")
         return true
     end
@@ -225,7 +347,10 @@ end
 function onChatMessage(player_id, player_name, message, is_console)
 	if handleVoteCommand(player_id, player_name, message) then return 1 end
 	if message:sub(1, 5) ~= "/ropt" then return nil end
-	if not M.Admins[player_name] and is_console ~= true then return 1 end
+	if not M.Admins[player_name] and is_console ~= true then
+		SendChatMessage(player_id, "You don't have privileges to use this command.")
+		return 1
+	end
 	local message = messageSplit(message)
 	if tableSize(message) < 2 then message[1] = "help" end
 	
@@ -252,7 +377,7 @@ function onChatMessage(player_id, player_name, message, is_console)
 			return 1
 		end
 		M.Commands[cmd]({speed = speed, from_playerid = player_id})
-	elseif cmd == "clearchat" or cmd == "results" or cmd == "clearvotes" or cmd == "togglenames" then
+	elseif cmd == "clearchat" or cmd == "results" or cmd == "clearvotes" or cmd == "togglenames" or cmd == "adminlist" then
 		M.Commands[cmd]({from_playerid = player_id})
 	elseif cmd == "reset" or cmd == "flip" then
 		local target_id = tonumber(message[2]) or -1
@@ -299,12 +424,23 @@ function onChatMessage(player_id, player_name, message, is_console)
 		elseif (cmd == "setprefix" and isAdminById(target_id)) or (cmd == "setsuffix" and r and g and b and isAdminById(target_id)) then
 			SendChatMessage(player_id, "Administrators are not allowed to use this command on themselves or on any other administrator. You may only use /ropt setsuffix playerId tag (without color codes).")
 			return 1
+		elseif r and cmd == "setprefix" then -- Delete this `elseif` to allow using RGB prefixes
+			SendChatMessage(player_id, "RGB prefixes are currently disabled. You can use RGB suffixes instead.")
+			return 1
 		end
 		if r and g and b then
 			M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id, tag = tag, rgb = 1, r=r,g=g,b=b})
 		else
 			M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id, tag = tag, rgb = 0})
 		end
+	elseif cmd == "addadmin" or cmd == "removeadmin" then
+		local target_name = (message[2]) or nil
+		local role = (message[3]) or nil
+		if not target_name then
+			SendChatMessage(player_id, "Usage: /ropt command player_name role (If no role is assigned, the player won't have a staff tag)")
+			return 1
+		end
+		M.Commands[cmd]({name = target_name, from_playerid = player_id, from_playername = player_name, role = role, isConsole = is_console})
 	else
 		local target_state = (message[2] and message[2]:lower()) or nil
 		if cmd ~= "adminx" and cmd ~= "status" and target_state ~= "disable" and target_state ~= "enable" then
@@ -315,6 +451,7 @@ function onChatMessage(player_id, player_name, message, is_console)
 	end
 	return 1
 end
+
 
 function setStates(player_id)
 	if M.state.IsRestrictionsEnabled then
@@ -461,11 +598,31 @@ end
 ---------------------------------------------------------------------------------------------
 -- Init
 function onInit()
-	local copy = {}
-	for _, player_name in pairs(M.Admins) do
-		copy[player_name] = true
+	if not loadAdmins() then
+		-- Convert list to dict if JSON doesn't exist yet
+		local copy = {}
+		for _, player_name in ipairs(M.Admins) do
+			copy[player_name] = true
+		end
+		M.Admins = copy
+		local copy2 = {}
+		for _, player_name in ipairs(M.privilegedEventManagers) do
+			copy2[player_name] = true
+		end
+		M.privilegedEventManagers = copy2
+		saveAdmins() -- Save initial state
+	else
+		local copy = {}
+		for _, name in ipairs(M.Admins) do
+			copy[name] = true
+		end
+		M.Admins = copy
+		local copy2 = {}
+		for _, name in ipairs(M.privilegedEventManagers) do
+			copy2[name] = true
+		end
+		M.privilegedEventManagers = copy2
 	end
-	M.Admins = copy
 
 	MP.RegisterEvent("onChatMessage", "onChatMessage")
 	MP.RegisterEvent("onConsoleInput", "onConsoleInput")
@@ -480,7 +637,6 @@ function onInit()
 	end
 	print("-----. Restriction Mod loaded .-----")
 end
-
 
 ---------------------------------------------------------------------------------------------
 -- Commands
@@ -642,10 +798,6 @@ M.Commands.clearvotes = function(data)
 	SendChatMessage(data.from_playerid, "Votes have been cleared.")
 end
 
--- M.Commands.settag = function(data)
--- 	setTag(data.to_playerid)
--- end
-
 M.Commands.setsuffix = function(data)
 	local player_name = MP.GetPlayerName(data.to_playerid)
 	M.activeTags[player_name] = M.activeTags[player_name] or {}
@@ -738,4 +890,111 @@ M.Commands.popup = function(data)
 	TriggerClientEvent:send(data.to_playerid, "restrictions_popup", data.text)
 	local player_name = MP.GetPlayerName(data.to_playerid)
 	print(data.from_playername .. " sent a popup window to " .. player_name .. " with the message: " .. data.text)
+end
+
+M.Commands.addadmin = function(data)
+	if not M.Admins[data.name] then
+		if data.role and data.role ~= "" then
+			if not M.roles[data.role] then
+				SendChatMessage(data.from_playerid, "Role '" .. data.role .. "' does not exist.")
+				SendChatMessage(data.from_playerid, "=> Available Roles")
+				for role, _ in pairs(M.roles) do
+					SendChatMessage(data.from_playerid, "-> " .. role)
+				end
+				return
+			end
+		end
+
+		local senderRole = getPlayerRole(data.from_playername)
+		if not senderRole or senderRole == "EventManager" then
+			local isPrivileged = M.privilegedEventManagers[data.from_playername]
+			if not isPrivileged and not data.isConsole then
+				SendChatMessage(data.from_playerid, "You do not have permission to manage admins.")
+				return
+			end
+		end
+
+		local targetRole = data.role or "EventManager"
+
+		local senderLevel = roleHierarchy[senderRole] or 1
+		local targetLevel = roleHierarchy[targetRole] or 1
+
+		if senderLevel < targetLevel and not data.isConsole then
+			SendChatMessage(data.from_playerid, "You do not have permission to assign a higher role than your own.")
+			return
+		end
+
+		M.Admins[data.name] = true
+		local roleText = data.role and (" with role - " .. data.role) or ""
+
+		-- Remove from all roles first
+		for role, list in pairs(M.roles) do
+			for i = #list, 1, -1 do
+				if list[i]:lower() == data.name:lower() then
+					table.remove(list, i)
+				end
+			end
+		end
+
+		if data.role and data.role ~= "" then
+			table.insert(M.roles[data.role], data.name)
+		end
+
+		saveAdmins()
+		SendChatMessage(data.from_playerid, data.name .. " was added as an admin" .. roleText)
+		print(data.from_playername .. " added " .. data.name .. " to administrators" .. roleText)
+		TriggerClientEvent:send(-1, "restrictions_cleartag", data.name)
+		setTag(-1, 0)
+	else
+		SendChatMessage(data.from_playerid, data.name .. " is already an admin.")
+	end
+end
+
+M.Commands.removeadmin = function(data)
+	if M.Admins[data.name] then
+		local senderRole = getPlayerRole(data.from_playername)
+		if not senderRole or senderRole == "EventManager" then
+			local isPrivileged = M.privilegedEventManagers[data.from_playername]
+			if not isPrivileged and not data.isConsole then
+				SendChatMessage(data.from_playerid, "You do not have permission to manage admins.")
+				return
+			end
+		end
+
+		local targetRole = getPlayerRole(data.name) or "EventManager"
+
+		local senderLevel = roleHierarchy[senderRole] or 1
+		local targetLevel = roleHierarchy[targetRole] or 1
+
+		if senderLevel < targetLevel and not data.isConsole then
+			SendChatMessage(data.from_playerid, "You do not have permission to remove an admin with higher privileges.")
+			return
+		end
+
+		M.Admins[data.name] = nil
+
+		-- Remove from all roles
+		for role, list in pairs(M.roles) do
+			for i = #list, 1, -1 do
+				if list[i]:lower() == data.name:lower() then
+					table.remove(list, i)
+				end
+			end
+		end
+
+		saveAdmins()
+		SendChatMessage(data.from_playerid, data.name .. " was removed from admins.")
+		print(data.from_playername .. " removed " .. data.name .. " from administrators")
+		TriggerClientEvent:send(-1, "restrictions_cleartag", data.name)
+	else
+		SendChatMessage(data.from_playerid, data.name .. " is not an admin.")
+	end
+end
+
+M.Commands.adminlist = function(data)
+	SendChatMessage(data.from_playerid, "== [Admin List] ==")
+	for name, _ in pairs(M.Admins) do
+		local role = getPlayerRole(name) or "No role"
+		SendChatMessage(data.from_playerid, "  -> " .. name .. " (" .. role .. ")")
+	end
 end

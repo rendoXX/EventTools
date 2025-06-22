@@ -15,12 +15,14 @@ local adminTagData
 local roleDisplayNames = {
 	Owner = "Owner",
 	Admin = "Administrator",
-	Moderator = "Moderator"
+	Moderator = "Moderator",
+	EventManager = "Event Manager"
 }
 local roleStyles = {
 	Owner =       { back = {r=36, g=112, b=255},  fore = {r=255, g=255, b=255} },
 	Admin =       { back = {r=14, g=75, b=239},  fore = {r=255, g=255, b=255} },
-	Moderator =   { back = {r=108, g=71, b=228}, fore = {r=255, g=255, b=255} }
+	Moderator =   { back = {r=108, g=71, b=228}, fore = {r=255, g=255, b=255} },
+	EventManager ={ back = {r=121, g=66, b=112}, fore = {r=255, g=255, b=255} }
 }
 
 -- ----------------------------------------------------------------------------
