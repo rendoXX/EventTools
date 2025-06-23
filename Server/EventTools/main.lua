@@ -68,6 +68,33 @@ function table.contains(tbl, val)
 	return false
 end
 
+local function tableToLuaString(tbl, indent)
+    indent = indent or ""
+    local result = "{\n"
+    local nextIndent = indent .. "  "
+    local isArray = #tbl > 0
+
+    for k, v in pairs(tbl) do
+        if not isArray then
+            result = result .. nextIndent .. tostring(k) .. " = "
+        else
+            result = result .. nextIndent
+        end
+
+        if type(v) == "table" then
+            result = result .. tableToLuaString(v, nextIndent) .. ",\n"
+        elseif type(v) == "string" then
+            result = result .. string.format("%q", v) .. ",\n"
+        else
+            result = result .. tostring(v) .. ",\n"
+        end
+    end
+
+    result = result .. indent .. "}"
+    return result
+end
+
+
 ---------------------------------------------------------------------------------------------
 -- MP Stuff
 local TriggerClientEvent = {}
@@ -206,41 +233,43 @@ end
 -- end
 
 local function loadAdmins()
-	local handle = io.open(adminDataPath, "r")
-	if handle then
-		local content = handle:read("*all")
-		handle:close()
-		local decoded = Util.JsonDecode(content)
-		if decoded then
-			-- Merge decoded admins into existing hardcoded M.Admins list
-			for _, name in ipairs(decoded.admins or {}) do
-				if not table.contains(M.Admins, name) then
-					table.insert(M.Admins, name)
-				end
-			end
+	local f = loadfile(adminDataPath)
+	if not f then
+		print("[ERROR] Failed to load" .. adminDataPath)
+		return false
+	end
 
-			-- Merge roles
-			for role, names in pairs(decoded.roles or {}) do
-				M.roles[role] = M.roles[role] or {}
-				for _, name in ipairs(names) do
-					if not table.contains(M.roles[role], name) then
-						table.insert(M.roles[role], name)
-					end
-				end
-			end
+	local ok, decoded = pcall(f)
+	if not ok then
+		print("[ERROR] Failed to execute" .. adminDataPath .. tostring(decoded))
+		return false
+	end
 
-			-- Merge privilegedEventManagers
-			for _, name in ipairs(decoded.privilegedEventManagers or {}) do
-				if not table.contains(M.privilegedEventManagers, name) then
-					table.insert(M.privilegedEventManagers, name)
-				end
-			end
-
-			return true
+	-- decoded is now your admin data table directly
+	for _, name in ipairs(decoded.admins or {}) do
+		if not table.contains(M.Admins, name) then
+			table.insert(M.Admins, name)
 		end
 	end
-	return false
+
+	for role, names in pairs(decoded.roles or {}) do
+		M.roles[role] = M.roles[role] or {}
+		for _, name in ipairs(names) do
+			if not table.contains(M.roles[role], name) then
+				table.insert(M.roles[role], name)
+			end
+		end
+	end
+
+	for _, name in ipairs(decoded.privilegedEventManagers or {}) do
+		if not table.contains(M.privilegedEventManagers, name) then
+			table.insert(M.privilegedEventManagers, name)
+		end
+	end
+
+	return true
 end
+
 
 
 local function saveAdmins()
@@ -271,17 +300,13 @@ local function saveAdmins()
 		privilegedEventManagers = privilegedList
 	}
 
-	local jsonString = Util.JsonEncode(data)
-	if jsonString and type(jsonString) == "string" then
-		local handle = io.open(adminDataPath, "w")
-		if handle then
-			handle:write(jsonString)
-			handle:close()
-		else
-			print("[ERROR] Failed to open admin JSON file for writing")
-		end
+	local luaString = "return " .. tableToLuaString(data)
+	local handle = io.open(adminDataPath, "w")
+	if handle then
+		handle:write(luaString)
+		handle:close()
 	else
-		print("[ERROR] Failed to encode admin data to JSON")
+		print("[ERROR] Failed to open admin JSON file for writing")
 	end
 end
 
