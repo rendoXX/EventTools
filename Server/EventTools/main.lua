@@ -6,7 +6,9 @@ local time = {}
 local votes = {}
 local votedPlayers = {}
 local lastDisconnected
-local adminDataPath = "Resources/Server/EventTools/admins_data.json"
+local adminDataFolder = "Resources/Server/EventTools/AdminData"
+local adminDataFile = "admins.lua"
+local adminDataPath = adminDataFolder .. "/" .. adminDataFile
 M.activeTags = {}
 M.Admins = {"Admin1", "Admin2", "Admin3", "Admin4"}
 M.Commands = {}
@@ -215,6 +217,27 @@ function getPlayerIdByName(name)
     return nil
 end
 
+function getPlayerIdByName2(name)
+	local idFromName = MP.GetPlayerIDByName(name)
+	if idFromName then
+		return idFromName
+	end
+    return nil
+end
+
+function sendToAllAdmins(from_playerid, msg)
+	if from_playerid ~= -2 then
+		SendChatMessage(-2, msg)
+	end
+	for id = 0, MP.GetPlayerCount() - 1 do
+		if id ~= from_playerid and isAdminById(id) then
+			SendChatMessage(id, msg)
+			break
+		end
+	end
+end
+
+
 -- local function loadAdmins()
 -- 	local handle = io.open(adminDataPath, "r")
 -- 	if handle then
@@ -235,7 +258,7 @@ end
 local function loadAdmins()
 	local f = loadfile(adminDataPath)
 	if not f then
-		print("[ERROR] Failed to load" .. adminDataPath)
+		print("[Warn] Failed to load " .. adminDataFile ..". Trying to create the file...")
 		return false
 	end
 
@@ -266,11 +289,8 @@ local function loadAdmins()
 			table.insert(M.privilegedEventManagers, name)
 		end
 	end
-
 	return true
 end
-
-
 
 local function saveAdmins()
 	local adminsList = {}
@@ -306,7 +326,27 @@ local function saveAdmins()
 		handle:write(luaString)
 		handle:close()
 	else
-		print("[ERROR] Failed to open admin JSON file for writing")
+		print("[ERROR] Failed to open admin file for writing. Make sure this path exist! -> " .. adminDataFolder)
+	end
+end
+
+function reloadadmindata()
+	if loadAdmins() then
+		-- convert loaded data to dictionary form
+		local copy = {}
+		for _, name in ipairs(M.Admins) do
+			copy[name] = true
+		end
+		M.Admins = copy
+
+		local copy2 = {}
+		for _, name in ipairs(M.privilegedEventManagers) do
+			copy2[name] = true
+		end
+		M.privilegedEventManagers = copy2
+		print("Admin data successfully reloaded.")
+	else
+		print("Failed to reload admin data.")
 	end
 end
 
@@ -387,6 +427,10 @@ function onChatMessage(player_id, player_name, message, is_console)
 		
 		return 1
 	end
+	if message[1]:lower() == "reloadadmindata" and is_console == true then
+		reloadadmindata()
+		return 1
+	end
 	
 	if M.Commands[message[1]:lower()] == nil then
 		SendChatMessage(player_id, "Unknown Command")
@@ -402,13 +446,31 @@ function onChatMessage(player_id, player_name, message, is_console)
 			return 1
 		end
 		M.Commands[cmd]({speed = speed, from_playerid = player_id})
-	elseif cmd == "clearchat" or cmd == "results" or cmd == "clearvotes" or cmd == "togglenames" or cmd == "adminlist" then
+	elseif cmd == "clearchat" or cmd == "results" or cmd == "clearvotes" or cmd == "togglenames" or cmd == "adminlist" or cmd == "startrace" or cmd == "stoprace" then
 		M.Commands[cmd]({from_playerid = player_id})
-	elseif cmd == "reset" or cmd == "flip" then
+	elseif cmd == "reset" or cmd == "flip" or cmd == "removeveh" then
 		local target_id = tonumber(message[2]) or -1
+		if target_id == -1 and message[2] then
+			local id = getPlayerIdByName2(message[2])
+			if id and id >= 0 then
+				target_id = id
+			else
+				SendChatMessage(player_id, "A player with the given username isn't in the server")
+				return 1
+			end
+		end
 		M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id})
 	elseif cmd == "cleartags" then
 		local target_id = tonumber(message[2]) or nil
+		if not target_id and message[2] then
+			local id = getPlayerIdByName2(message[2])
+			if id and id >= 0 then
+				target_id = id
+			else
+				SendChatMessage(player_id, "A player with the given username isn't in the server")
+				return 1
+			end
+		end
 		if not target_id or target_id and target_id < 0 then
 			SendChatMessage(player_id, "Usage: /ropt cleartags playerId")
 			return 1
@@ -416,15 +478,33 @@ function onChatMessage(player_id, player_name, message, is_console)
 		M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id})
 	elseif cmd == "popup" then
 		local target_id = tonumber(message[2]) or nil
+		if not target_id and message[2] then
+			local id = getPlayerIdByName2(message[2])
+			if id and id >= 0 then
+				target_id = id
+			else
+				SendChatMessage(player_id, "A player with the given username isn't in the server")
+				return 1
+			end
+		end
 		local text = table.concat(message, " ", 3)
 		if not text or text == "" or not target_id then
 			SendChatMessage(player_id, "Usage: /ropt popup playerId message")
 			return 1
 		end
-		M.Commands[cmd]({to_playerid = target_id, from_playername = player_name, text = text})
+		M.Commands[cmd]({to_playerid = target_id, from_playerid = player_id, from_playername = player_name, text = text})
 	elseif cmd == "freeze" then
 		local target_state = (message[2] and message[2]:lower()) or nil
 		local target_id = tonumber(message[3]) or -1
+		if target_id == -1 and message[3] then
+			local id = getPlayerIdByName2(message[3])
+			if id and id >= 0 then
+				target_id = id
+			else
+				SendChatMessage(player_id, "A player with the given username isn't in the server")
+				return 1
+			end
+		end
 		if target_state ~= "disable" and target_state ~= "enable" then
 			SendChatMessage(player_id, "Usage: /ropt freeze state (enable, disable) playerId (optional)")
 			return 1
@@ -439,6 +519,15 @@ function onChatMessage(player_id, player_name, message, is_console)
 		M.Commands[cmd]({time = target_time, from_playerid = player_id})
 	elseif cmd == "setsuffix" or cmd == "setprefix" then
 		local target_id = tonumber(message[2]) or nil
+		if not target_id and message[2] then
+			local id = getPlayerIdByName2(message[2])
+			if id and id >= 0 then
+				target_id = id
+			else
+				SendChatMessage(player_id, "A player with the given username isn't in the server")
+				return 1
+			end
+		end
 		local tag = (message[3]) or nil
 		local r = tonumber(message[4]) or nil
 		local g = tonumber(message[5]) or nil
@@ -486,14 +575,12 @@ function setStates(player_id)
 	end
 	if M.state.CompmodeEnabled then
 		TriggerClientEvent:send(player_id, "restrictions_enablePartSelectorOld")
-	else
-		TriggerClientEvent:send(player_id, "restrictions_disablePartSelectorOld")
 	end
-	if M.state.BlockPartConfigurator then
-		TriggerClientEvent:send(player_id, "restrictions_enablePartSelector")
-	else
-		TriggerClientEvent:send(player_id, "restrictions_disablePartSelector")
-	end
+	-- if M.state.BlockPartConfigurator then
+	-- 	TriggerClientEvent:send(player_id, "restrictions_enablePartSelector")
+	-- else
+	-- 	TriggerClientEvent:send(player_id, "restrictions_disablePartSelector")
+	-- end
 	if M.state.SpeedLimitation then
 		TriggerClientEvent:send(player_id, "restrictions_enableSpeedLimit")
 	else
@@ -573,8 +660,12 @@ function onPlayerDisconnect(player_id)
 end
 
 function onVehicleSpawn(player_id, vehicle_id, vehicle_data)
-	setStates(player_id)
 	local player_name = MP.GetPlayerName(player_id)
+
+	if isAdminByName(player_name) then
+		setTag(-1, 1)
+	end
+
 	if M.state.BeamLingBlocked then
 		if M.state.AdminException and M.Admins[player_name] then return end
 		if isUnicycle(vehicle_data) then
@@ -582,10 +673,8 @@ function onVehicleSpawn(player_id, vehicle_id, vehicle_data)
 			return 1 -- deny spawn
 		end
 	end
-		
-	if isAdminByName(player_name) then
-		setTag(-1, 1)
-	end
+
+	setStates(player_id)
 end
 
 function onVehicleEdited(player_id, vehicle_id, vehicle_data)
@@ -593,8 +682,8 @@ function onVehicleEdited(player_id, vehicle_id, vehicle_data)
 		local player_name = MP.GetPlayerName(player_id)
 		if M.state.AdminException and M.Admins[player_name] then return end
 		if isUnicycle(vehicle_data) then
-			SendChatMessage(player_id, 'Unicycles are disabled!')
 			MP.RemoveVehicle(player_id, vehicle_id)
+			SendChatMessage(player_id, 'Unicycles are disabled!')
 		end
 	end
 end
@@ -605,7 +694,7 @@ function removeUnicycle()
 			-- skip this admin player
 		else
 			for vehicle_id, vehicle_data in pairs(MP.GetPlayerVehicles(player_id) or {}) do
-				if onVehicleSpawn(player_id, vehicle_id, vehicle_data) then
+				if isUnicycle(vehicle_data) then
 					MP.RemoveVehicle(player_id, vehicle_id)
 				end
 			end
@@ -620,11 +709,15 @@ function clearChat()
   end
 end
 
+function test(senderID, data)
+	print("Print: " .. tostring(data) .. " from " .. senderID)
+end
+
 ---------------------------------------------------------------------------------------------
 -- Init
 function onInit()
 	if not loadAdmins() then
-		-- Convert list to dict if JSON doesn't exist yet
+		-- Convert list to dict if file doesn't exist yet
 		local copy = {}
 		for _, player_name in ipairs(M.Admins) do
 			copy[player_name] = true
@@ -655,6 +748,7 @@ function onInit()
 	MP.RegisterEvent("onPlayerDisconnect", "onPlayerDisconnect")
 	MP.RegisterEvent("onVehicleSpawn", "onVehicleSpawn")
 	MP.RegisterEvent("onVehicleEdited", "onVehicleEdited")
+	MP.RegisterEvent("rxr_test", "test")
 	
 	-- hotreload
 	for player_id, _ in pairs(MP.GetPlayers()) do
@@ -669,17 +763,29 @@ M.Commands.restr = function(data)
 	if data.state == "enable" then
 		M.state.IsRestrictionsEnabled = true
 		TriggerClientEvent:send(-1, "restrictions_enableCompetitiveMode")
+		TriggerClientEvent:send(-1, "restrictions_enablePartSelector") -- Merged from M.Commands.pcfg
 	elseif data.state == "disable" then
 		M.state.IsRestrictionsEnabled = false
 		TriggerClientEvent:send(-1, "restrictions_disableCompetitiveMode")
+		TriggerClientEvent:send(-1, "restrictions_disablePartSelector") -- Merged from M.Commands.pcfg
 	end
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set Restriction mode state to: " .. data.state)
+	SendChatMessage(data.from_playerid or -2, "Restriction mode state has been set to: " .. data.state)
 end
 
 M.Commands.reset = function(data)
 	TriggerClientEvent:send(data.to_playerid, "restrictions_resetAllOwnedVehicles")
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	local target_name = (data.to_playerid ~= -1 and MP.GetPlayerName(data.to_playerid)) or "Everyone"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has reset " .. target_name .. "'s vehicle")
+	SendChatMessage(data.from_playerid or -2, target_name .. "'s vehicle has been reset")
 end
 
 M.Commands.compmode = function(data)
+	SendChatMessage(data.from_playerid or -2, "Competition Mode (Outdated) state has been set to: " .. data.state)
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set Competition Mode (Outdated) state to: " .. data.state)
 	if data.state == "enable" then
 		M.state.CompmodeEnabled = true
 		TriggerClientEvent:send(-1, "restrictions_enablePartSelectorOld")
@@ -689,15 +795,18 @@ M.Commands.compmode = function(data)
 	end
 end
 
-M.Commands.pcfg = function(data)
-	if data.state == "enable" then
-		M.state.BlockPartConfigurator = true
-		TriggerClientEvent:send(-1, "restrictions_enablePartSelector")
-	elseif data.state == "disable" then
-		M.state.BlockPartConfigurator = false
-		TriggerClientEvent:send(-1, "restrictions_disablePartSelector")
-	end
-end
+-- M.Commands.pcfg = function(data)
+-- 	if data.state == "enable" then
+-- 		M.state.BlockPartConfigurator = true
+-- 		TriggerClientEvent:send(-1, "restrictions_enablePartSelector")
+-- 	elseif data.state == "disable" then
+-- 		M.state.BlockPartConfigurator = false
+-- 		TriggerClientEvent:send(-1, "restrictions_disablePartSelector")
+-- 	end
+-- 	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+-- 	sendToAllAdmins(data.from_playerid, sender_name .. " has set Vehicle Part Configurator Disabler state to: " .. data.state)
+-- 	SendChatMessage(data.from_playerid or -2, "Vehicle Part Configurator Disabler state has been set to: " .. data.state)
+-- end
 
 M.Commands.status = function(data)
 	SendChatMessage(data.from_playerid, "=> Current States")
@@ -709,7 +818,9 @@ end
 M.Commands.adminx = function(data)
 	M.state.AdminException = not M.state.AdminException
 	local state = tostring(M.state.AdminException)
-	SendChatMessage(data.from_playerid, "Admin exception state set to: " .. state)
+	SendChatMessage(data.from_playerid, "Admin exception mode state has been set to: " .. state)
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set Admin exception mode state to: " .. state)
 end
 
 M.Commands.sl = function(data)
@@ -720,19 +831,32 @@ M.Commands.sl = function(data)
 		M.state.SpeedLimitation = false
 		TriggerClientEvent:send(-1, "restrictions_disableSpeedLimit")
 	end
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set Vehicle Speed Limiter state to: " .. data.state)
+	SendChatMessage(data.from_playerid or -2, "Vehicle Speed Limiter state has been set to: " .. data.state)
 end
 
 M.Commands.slset = function(data)
 	speed = data.speed
 	M.state.SpeedLimitValue = data.speed
 	TriggerClientEvent:send(-1, "restrictions_setSpeedLimit", speed)
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has changed the speed limit to: " .. tostring(data.speed))
+	SendChatMessage(data.from_playerid or -2, "Speed limit has been changed to: " .. tostring(data.speed))
 end
 
 M.Commands.flip = function(data)
 	TriggerClientEvent:send(data.to_playerid, "restrictions_flipEnable")
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	local target_name = (data.to_playerid ~= -1 and MP.GetPlayerName(data.to_playerid)) or "Everyone"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has flipped " .. target_name .. "'s vehicle")
+	SendChatMessage(data.from_playerid or -2, target_name .. "'s vehicle has been flipped")
 end
 
 M.Commands.nowalk = function(data)
+	SendChatMessage(data.from_playerid or -2, "NoWalk state has been set to: " .. data.state)
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set the NoWalk state to: " .. data.state)
 	if data.state == "enable" then
 		M.state.BeamLingBlocked = true
 		removeUnicycle()
@@ -754,6 +878,9 @@ M.Commands.freeze = function(data)
 		M.state.IsFrozen = false
 		TriggerClientEvent:send(data.to_playerid, "restrictions_freezeVehicleDisable")
 	end
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set the vehicle freeze state to: " .. tostring(M.state.IsFrozen))
+	SendChatMessage(data.from_playerid or -2, "Vehicle freeze state has been set to: " .. tostring(M.state.IsFrozen))
 end
 
 M.Commands.vsel = function(data)
@@ -764,6 +891,9 @@ M.Commands.vsel = function(data)
 		M.state.BlockVehicleSelector = false
 		TriggerClientEvent:send(-1, "restrictions_disableVehicleSelector")
 	end
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set Vehicle Selector Disabler state to: " .. data.state)
+	SendChatMessage(data.from_playerid or -2, "Vehicle Selector Disabler state has been set to: " .. data.state)
 end
 
 M.Commands.settime = function(data)
@@ -776,6 +906,8 @@ M.Commands.settime = function(data)
 	time = {hour = hour, minute = minute}
 	M.state.CurrentTime = data.time
 	TriggerClientEvent:send(-1, "restrictions_setTimeOfTheDay", time)
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set the time of day to " .. data.time)
 	SendChatMessage(data.from_playerid or -2, "Time of day set to " .. data.time)
 end
 
@@ -820,6 +952,8 @@ end
 M.Commands.clearvotes = function(data)
 	votes = {}
 	votedPlayers = {}
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has cleared all votes.")
 	SendChatMessage(data.from_playerid, "Votes have been cleared.")
 end
 
@@ -855,6 +989,10 @@ M.Commands.setsuffix = function(data)
 		local payload = data.tag .. "|" .. data.rgb .. "|" .. player_name
 		TriggerClientEvent:send(-1, "restrictions_setsuffix", payload)
 	end
+	local target_name = (data.to_playerid ~= -1 and MP.GetPlayerName(data.to_playerid)) or "Everyone"
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	SendChatMessage(data.from_playerid, "Tag (suffix) has been set for " .. target_name .. " with the text: " .. data.tag)
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set a tag (suffix) for " .. target_name .. " with the text: " .. data.tag)
 end
 
 
@@ -896,12 +1034,20 @@ M.Commands.setprefix = function(data)
 		local payload = data.tag .. "|" .. data.rgb .. "|" .. player_name
 		TriggerClientEvent:send(-1, "restrictions_setprefix", payload)
 	end
+	local target_name = (data.to_playerid ~= -1 and MP.GetPlayerName(data.to_playerid)) or "Everyone"
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	SendChatMessage(data.from_playerid, "Tag (prefix) has been set for " .. target_name .. " with the text: " .. data.tag)
+	sendToAllAdmins(data.from_playerid, sender_name .. " has set a tag (prefix) for " .. target_name .. " with the text: " .. data.tag)
 end
 
 M.Commands.cleartags = function(data)
 	local player_name = MP.GetPlayerName(data.to_playerid)
 	TriggerClientEvent:send(-1, "restrictions_cleartag", player_name)
 	M.activeTags[player_name] = nil
+	local target_name = (data.to_playerid ~= -1 and MP.GetPlayerName(data.to_playerid)) or "Everyone"
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	SendChatMessage(data.from_playerid, "Tags have been cleared for: " .. target_name)
+	sendToAllAdmins(data.from_playerid, sender_name .. " has cleared tags for " .. target_name)
 end
 
 M.Commands.togglenames = function(data)
@@ -909,6 +1055,8 @@ M.Commands.togglenames = function(data)
 	local state = tostring(M.state.HideNames)
 	TriggerClientEvent:send(-1, "restrictions_toggleNames", state)
 	SendChatMessage(data.from_playerid, "Hide Names state set to: " .. state)
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " set Hide Names state set to: " .. state)
 end
 
 M.Commands.popup = function(data)
@@ -1022,4 +1170,53 @@ M.Commands.adminlist = function(data)
 		local role = getPlayerRole(name) or "No role"
 		SendChatMessage(data.from_playerid, "  -> " .. name .. " (" .. role .. ")")
 	end
+end
+
+M.Commands.removeveh = function(data)
+	if data.to_playerid == -1 then
+		for player_id, player_name in pairs(MP.GetPlayers() or {}) do
+			if M.state.AdminException and M.Admins[player_name] then
+				-- skip this admin player
+			else
+				for vehicle_id, _ in pairs(MP.GetPlayerVehicles(player_id) or {}) do
+					MP.RemoveVehicle(player_id, vehicle_id)
+				end
+			end
+		end
+	else
+		for vehicle_id, _ in pairs(MP.GetPlayerVehicles(data.to_playerid) or {}) do
+			MP.RemoveVehicle(data.to_playerid, vehicle_id)
+		end
+	end
+	local target_name = (data.to_playerid ~= -1 and MP.GetPlayerName(data.to_playerid)) or "Everyone"
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	SendChatMessage(data.from_playerid, "All vehicles have been removed for " .. target_name .. ".")
+	sendToAllAdmins(data.from_playerid, sender_name .. " has removed all of " .. target_name .. "'s vehicles.")
+end
+
+M.Commands.startrace = function(data)
+	M.state.IsRestrictionsEnabled = true
+	TriggerClientEvent:send(-1, "restrictions_enableCompetitiveMode")
+	-- M.state.BlockPartConfigurator = true
+	TriggerClientEvent:send(-1, "restrictions_enablePartSelector")
+	M.state.BlockVehicleSelector = true
+	TriggerClientEvent:send(-1, "restrictions_enableVehicleSelector")
+
+	
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has started the race!")
+	SendChatMessage(data.from_playerid or -2, "The race has been started!")
+end
+
+M.Commands.stoprace = function(data)
+	M.state.IsRestrictionsEnabled = false
+	TriggerClientEvent:send(-1, "restrictions_disableCompetitiveMode")
+	-- M.state.BlockPartConfigurator = false
+	TriggerClientEvent:send(-1, "restrictions_disablePartSelector")
+	M.state.BlockVehicleSelector = false
+	TriggerClientEvent:send(-1, "restrictions_disableVehicleSelector")
+
+	local sender_name = (data.from_playerid ~= -2 and MP.GetPlayerName(data.from_playerid)) or "Console"
+	sendToAllAdmins(data.from_playerid, sender_name .. " has stopped the race!")
+	SendChatMessage(data.from_playerid or -2, "The race has been stopped!")
 end

@@ -10,7 +10,7 @@ local lastSpeedLimit = 0
 local freezeState = false
 local toggleNames = false
 local adminTagQueue = false
-local adminTagData
+local adminTagData = {}
 
 local roleDisplayNames = {
 	Owner = "Owner",
@@ -162,10 +162,12 @@ end
 
 M.enableVehicleSelector = function()
 	vehicleSelectorUICheckState = true
+	extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", true)
 end
 
 M.disableVehicleSelector = function()
 	vehicleSelectorUICheckState = false
+	extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", false)
 end
 
 M.setTimeOfTheDay = function(data)
@@ -178,34 +180,42 @@ M.setTimeOfTheDay = function(data)
 end
 
 local function setAdminTags()
-	local playerId = tonumber(adminTagData[1])
-	local role = adminTagData[2]
+	for _, data in pairs(adminTagData) do
+		local playerId = tonumber(data[1])
+		local role = data[2]
 
-	local displayName = roleDisplayNames[role]
-	local style = roleStyles[role]
-	if not displayName or not style then
-		print("Missing role info")
-		return
-	end
+		local displayName = roleDisplayNames[role]
+		local style = roleStyles[role]
+		if not displayName or not style then
+			print("Missing role info")
+			return
+		end
 
-	local p = MPVehicleGE.getPlayers()[playerId]
-	if p then
-		p.nickPrefixes = { "[" .. displayName .. "] " }
-		p:setCustomRole({
-			backcolor = style.back,
-			forecolor = style.fore,
-			tag = "",
-			shorttag = ""
-		})
-	else
-		print("No player found for ID: " .. tostring(playerId))
+		local p = MPVehicleGE.getPlayers()[playerId]
+		if p then
+			p.nickPrefixes = { "[" .. displayName .. "] " }
+			p:setCustomRole({
+				backcolor = style.back,
+				forecolor = style.fore,
+				tag = "",
+				shorttag = ""
+			})
+		else
+			print("No player found for ID: " .. tostring(playerId))
+		end
+		adminTagData[playerId] = nil
 	end
 end
 
 M.setTag = function(data)
-	adminTagData = splitString(data)
-	dump(adminTagData)
-	local state = tonumber(adminTagData[3])
+	local splitData = splitString(data)
+	local id = tonumber(splitData[1])
+	if id then
+		adminTagData[id] = splitData
+	else
+		return 1
+	end
+	local state = tonumber(splitData[3])
 	if state == 1 then
 		adminTagQueue = true
 	else
@@ -352,8 +362,10 @@ end
 
 M.onClientPostStartMission = function()
 	if isBeamMPSession() then
-		extensions.core_input_actionFilter.setGroup("restrictions_competitive", {"toggleRadialMenuMulti","recover_vehicle","reset_physics","reset_all_physics","recover_vehicle_alt","recover_to_last_road","parts_selector","reload_vehicle","reload_all_vehicles","loadHome","saveHome","dropPlayerAtCamera","dropPlayerAtCameraNoReset","toggleConsoleNG","goto_checkpoint","toggleConsole","nodegrabberAction","nodegrabberGrab","nodegrabberRender","editorToggle","objectEditorToggle","editorSafeModeToggle","pause","slower_motion","faster_motion","toggle_slow_motion","toggleTraffic","toggleAITraffic","forceField","funBoom","funBreak","funExtinguish","funFire","funHinges","funTires","funRandomTire"})
+		extensions.core_input_actionFilter.setGroup("restrictions_competitive", {"vehicledebugMenu","toggleRadialMenuMulti","recover_vehicle","reset_physics","reset_all_physics","recover_vehicle_alt","recover_to_last_road","parts_selector","reload_vehicle","reload_all_vehicles","loadHome","saveHome","dropPlayerAtCamera","dropPlayerAtCameraNoReset","toggleConsoleNG","goto_checkpoint","toggleConsole","nodegrabberAction","nodegrabberGrab","nodegrabberRender","editorToggle","objectEditorToggle","editorSafeModeToggle","pause","slower_motion","faster_motion","toggle_slow_motion","toggleTraffic","toggleAITraffic","forceField","funBoom","funBreak","funExtinguish","funFire","funHinges","funTires","funRandomTire"})
 		core_input_actionFilter.addAction(0, "restrictions_competitive", false)
+		extensions.core_input_actionFilter.setGroup("restrictions_vsel", {"vehicle_selector"})
+		core_input_actionFilter.addAction(0, "restrictions_vsel", false)
 		
 		AddEventHandler("restrictions_enableCompetitiveMode", M.enableCompetitiveMode)
 		AddEventHandler("restrictions_disableCompetitiveMode", M.disableCompetitiveMode)
@@ -386,6 +398,7 @@ M.onWorldReadyState = function(state)
 	if state == 2 then
 		if isBeamMPSession() and compModeState then		
 			extensions.core_input_actionFilter.addAction(0, 'restrictions_competitive', true)
+			extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", true)
 		end
 	end
 end
