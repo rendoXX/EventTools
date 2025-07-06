@@ -709,10 +709,6 @@ function clearChat()
   end
 end
 
-function test(senderID, data)
-	print("Print: " .. tostring(data) .. " from " .. senderID)
-end
-
 ---------------------------------------------------------------------------------------------
 -- Init
 function onInit()
@@ -748,7 +744,6 @@ function onInit()
 	MP.RegisterEvent("onPlayerDisconnect", "onPlayerDisconnect")
 	MP.RegisterEvent("onVehicleSpawn", "onVehicleSpawn")
 	MP.RegisterEvent("onVehicleEdited", "onVehicleEdited")
-	MP.RegisterEvent("rxr_test", "test")
 	
 	-- hotreload
 	for player_id, _ in pairs(MP.GetPlayers()) do
