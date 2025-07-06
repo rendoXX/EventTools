@@ -31,11 +31,12 @@ Disables access to:
 - Environment settings  
 - Radial menu  
 - Restricted keybinds  
+- Part Configurator  
 
 Blocked keybinds:
 ```
 {
-  "toggleRadialMenuMulti", "recover_vehicle", "reset_physics", "reset_all_physics",
+  "vehicledebugMenu","toggleRadialMenuMulti", "recover_vehicle", "reset_physics", "reset_all_physics",
   "recover_vehicle_alt", "recover_to_last_road", "parts_selector", "reload_vehicle",
   "reload_all_vehicles", "loadHome", "saveHome", "dropPlayerAtCamera", "dropPlayerAtCameraNoReset",
   "toggleConsoleNG", "goto_checkpoint", "toggleConsole", "nodegrabberAction", "nodegrabberGrab",
@@ -48,25 +49,34 @@ Blocked keybinds:
 
 ---
 
-### `/ropt reset <playerId>`
-Resets the vehicle of the specified player.  
-If no `playerId` is provided, resets all vehicles.
-
----
-
-### `/ropt pcfg <state>`
-Enables or disables access to the Part Configurator.
-
----
-
 ### `/ropt vsel <state>`
 Enables or disables access to the Vehicle Selector.
+
+---
+
+### `/ropt startrace`  
+Starts the race by enabling restrictions and disabling access to vehicle selector and part selector.   
+- Enables `/ropt restr`
+- Enables `/ropt vsel`
+
+---
+
+### `/ropt stoprace`  
+Stops the race by disabling restrictions.  
+- Disables `/ropt restr`  
+- Disables `/ropt vsel`
 
 ---
 
 ### `/ropt compmode <state>`
 Disables many features, similar to Scenario Mode.  
 This command is deprecated and not recommended.
+
+---
+
+### `/ropt reset <playerId>`
+Resets the vehicle of the specified player.  
+If no `playerId` is provided, resets all vehicles.
 
 ---
 
@@ -153,6 +163,9 @@ Displays a popup window with a message and “OK” button.
 ### `/ropt setprefix <playerId> <Tag> [r] [g] [b]`
 Adds a tag before a player’s name.
 
+### `/ropt setsuffix <playerId> <Tag> [r] [g] [b]`
+Adds a tag after the player’s name.  
+
 - `Tag` must not include spaces.  
 - `[r] [g] [b]` are optional RGB values.
 
@@ -163,9 +176,9 @@ Rules:
 
 ---
 
-### `/ropt setsuffix <playerId> <Tag> [r] [g] [b]`
-Adds a tag after the player’s name.  
-Same syntax and restrictions as `/ropt setprefix`.
+### `/ropt removeveh <playerId>`
+Removes all vehicles of the specified player.  
+If `playerId` is not specified, all vehicles will be removed.
 
 ---
 
