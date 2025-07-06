@@ -255,6 +255,15 @@ end
 -- 	return false
 -- end
 
+local function ensureFolderExists(path)
+	local isWindows = package.config:sub(1,1) == "\\"
+	if isWindows then
+		os.execute('mkdir "' .. path .. '" >nul 2>&1')
+	else
+		os.execute('mkdir -p "' .. path .. '" > /dev/null 2>&1')
+	end
+end
+
 local function loadAdmins()
 	local f = loadfile(adminDataPath)
 	if not f then
@@ -293,6 +302,9 @@ local function loadAdmins()
 end
 
 local function saveAdmins()
+	-- Ensure directory exists
+	ensureFolderExists(adminDataFolder)
+
 	local adminsList = {}
 	local privilegedList = {}
 
