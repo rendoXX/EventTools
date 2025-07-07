@@ -398,6 +398,8 @@ M.onWorldReadyState = function(state)
 	if state == 2 then
 		if isBeamMPSession() and compModeState then		
 			extensions.core_input_actionFilter.addAction(0, 'restrictions_competitive', true)
+		end
+		if isBeamMPSession() and vehicleSelectorUICheckState then		
 			extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", true)
 		end
 	end
