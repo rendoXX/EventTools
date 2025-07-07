@@ -582,8 +582,10 @@ end
 function setStates(player_id)
 	if M.state.IsRestrictionsEnabled then
 		TriggerClientEvent:send(player_id, "restrictions_enableCompetitiveMode")
+		TriggerClientEvent:send(player_id, "restrictions_enablePartSelector") -- Merged from M.Commands.pcfg
 	else
 		TriggerClientEvent:send(player_id, "restrictions_disableCompetitiveMode")
+		TriggerClientEvent:send(player_id, "restrictions_disablePartSelector") -- Merged from M.Commands.pcfg
 	end
 	if M.state.CompmodeEnabled then
 		TriggerClientEvent:send(player_id, "restrictions_enablePartSelectorOld")
