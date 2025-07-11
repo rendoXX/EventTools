@@ -192,7 +192,7 @@ function TriggerClientEvent:send(player_id, event_name, event_data)
 		if M.state.AdminException and M.Admins[player_name] and event_name ~= "EventTools_setTag" and event_name ~= "EventTools_setprefix" and event_name ~= "EventTools_setsuffix" then
 		else
 			if not self:is_synced(player_id) then
-				print(MP.GetPlayerName(player_id) .. " is not ready yet to receive event data")
+				-- print(MP.GetPlayerName(player_id) .. " is not ready yet to receive event data")
 			else
 				if type(event_data) == "table" then event_data = Util.JsonEncode(event_data) end
 				MP.TriggerClientEvent(player_id, event_name, tostring(event_data) or "")
@@ -205,7 +205,7 @@ function TriggerClientEvent:broadcastExcept(player_id, event_name, event_data)
 	for player_id_2, _ in pairs(MP.GetPlayers()) do
 		if player_id ~= player_id_2 then
 			if not self:is_synced(player_id_2) then
-				print(MP.GetPlayerName(player_id_2) .. " is not ready yet to receive event data")
+				-- print(MP.GetPlayerName(player_id_2) .. " is not ready yet to receive event data")
 			else
 				if type(event_data) == "table" then event_data = Util.JsonEncode(event_data) end
 				MP.TriggerClientEvent(player_id_2, event_name, tostring(event_data) or "")			
@@ -680,7 +680,6 @@ end
 
 
 function setStates(player_id)
-	print("IS HERE!!!")
 	if M.state.IsRestrictionsEnabled then
 		TriggerClientEvent:send(player_id, "EventTools_enableCompetitiveMode")
 		TriggerClientEvent:send(player_id, "EventTools_enablePartSelector") -- Merged from M.Commands.pcfg
@@ -705,7 +704,6 @@ function setStates(player_id)
 	TriggerClientEvent:send(player_id, "EventTools_setSpeedLimit", speed)
 
 	if time.state == 1 then
-		print(time)
 		TriggerClientEvent:send(player_id, "EventTools_setTimeOfTheDay", time)
 	end
 
