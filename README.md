@@ -68,8 +68,8 @@ Stops the race by disabling restrictions.
 
 ---
 
-~~### `/ropt compmode <state>`~~
-~~Disables many features, similar to Scenario Mode.  ~~
+### ~~`/ropt compmode <state>`~~
+~~Disables many features, similar to Scenario Mode.~~  
 ~~This command is deprecated and not recommended.~~
 
 ---
