@@ -68,13 +68,13 @@ Stops the race by disabling restrictions.
 
 ---
 
-### `/ropt compmode <state>`
-Disables many features, similar to Scenario Mode.  
-This command is deprecated and not recommended.
+~~### `/ropt compmode <state>`~~
+~~Disables many features, similar to Scenario Mode.  ~~
+~~This command is deprecated and not recommended.~~
 
 ---
 
-### `/ropt reset <playerId>`
+### `/ropt reset <player>`
 Resets the vehicle of the specified player.  
 If no `playerId` is provided, resets all vehicles.
 
@@ -101,7 +101,7 @@ Sets the speed limit in km/h.
 
 ---
 
-### `/ropt flip <playerId>`
+### `/ropt flip <player>`
 Makes a player's vehicle do a front flip.  
 If `playerId` is not specified, all vehicles will flip.
 
@@ -113,11 +113,17 @@ Prevents players from using BeamLing (unicycle) and removes existing ones.
 ---
 
 ### `/ropt clearchat`
-Clears the chat by sending 20 empty messages.
+Clears the chat by sending empty messages.
 
 ---
 
-### `/ropt freeze <state> <playerId>`
+### `/ropt resetchat`
+Clears the chat and resets the UI (to finish the clearing process) for everyone.  
+At some point a better version of `/ropt clearchat`
+
+---
+
+### `/ropt freeze <state> <player>`
 Freezes the player's vehicle.  
 If `playerId` is not specified, everyone's vehicle will freeze.
 
@@ -128,9 +134,9 @@ Displays a list of all `/ropt` commands.
 
 ---
 
-### `/ropt settime <time>`
+### `/ropt settime <time> <isLocked>`
 Sets the time for all players.  
-Players can still change it unless `/ropt restr` is enabled.
+If `<isLocked>` is set to true, players won't be able to change the time.
 
 ---
 
@@ -152,7 +158,7 @@ Rejoining or changing settings will not bypass this unless the player knows how 
 
 ---
 
-### `/ropt popup <playerId> <text>`
+### `/ropt popup <player> <text>`
 Displays a popup window with a message and “OK” button.
 
 - `text` can include spaces.  
@@ -160,10 +166,10 @@ Displays a popup window with a message and “OK” button.
 
 ---
 
-### `/ropt setprefix <playerId> <Tag> [r] [g] [b]`
+### `/ropt setprefix <player> <Tag> [r] [g] [b]`
 Adds a tag before a player’s name.
 
-### `/ropt setsuffix <playerId> <Tag> [r] [g] [b]`
+### `/ropt setsuffix <player> <Tag> [r] [g] [b]`
 Adds a tag after the player’s name.  
 
 - `Tag` must not include spaces.  
@@ -176,9 +182,19 @@ Rules:
 
 ---
 
-### `/ropt removeveh <playerId>`
+### `/ropt cleartags <player>`
+Clears the tag (prefix or suffix) for the specified player. 
+
+---
+
+### `/ropt removeveh <player>`
 Removes all vehicles of the specified player.  
 If `playerId` is not specified, all vehicles will be removed.
+
+---
+
+### `/ropt aoc`
+Enables Admin Only Chat, preventing regular players from typing in the chat.
 
 ---
 
@@ -205,11 +221,11 @@ Vote for a specific player.
 
 ### Commands
 
-- `/ropt addadmin <PlayerName> <Role>`  
+- `/ropt addadmin <username> <Role>`  
   Adds a player as an admin.  
   If the role is left empty, the player is granted privileges equivalent to **Event Manager**, but no visible tag will appear next to their name in-game.
 
-- `/ropt removeadmin <PlayerName>`  
+- `/ropt removeadmin <username>`  
   Removes a player from the admin list.
 
 - `/ropt adminlist`  

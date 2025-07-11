@@ -7,8 +7,9 @@ local partSelectorUICheckState = false
 local vehicleSelectorUICheckState = false
 local speedLimitStatus = false
 local lastSpeedLimit = 0
+local lastSetTime = 0
 local freezeState = false
-local toggleNames = false
+local toggleNamesState = false
 local adminTagQueue = false
 local adminTagData = {}
 
@@ -65,7 +66,7 @@ local function evalTPPosition(pos_vec, vehicle, factor)
 	return new_pos
 end
 
-local function convertClockTimeToBeamNGTime(hour, minute)
+local function convertClockTimeToBeamNGTime(hour, minute, state)
     -- Convert time to total minutes
     local totalMinutes = hour * 60 + minute
 
@@ -75,8 +76,13 @@ local function convertClockTimeToBeamNGTime(hour, minute)
     -- Normalize to 0-1 range
     local beamngTime = totalMinutes / (24 * 60)
 
-	if core_environment.setTimeOfDay then
-		core_environment.setTimeOfDay({time = beamngTime})
+	if tonumber(state) == 1 then
+		lastSetTime = beamngTime
+	else
+		lastSetTime = 0
+	end
+	if core_environment.getTimeOfDay() then
+		core_environment.setTimeOfDay({time = beamngTime, play = false})
 	end
 end
 
@@ -84,12 +90,12 @@ end
 -- ----------------------------------------------------------------------------
 -- Custom Events
 M.enableCompetitiveMode = function()
-	extensions.core_input_actionFilter.addAction(0, 'restrictions_competitive', true)
+	extensions.core_input_actionFilter.addAction(0, 'EventTools_competitive', true)
 	compModeState = true
 end
 
 M.disableCompetitiveMode = function()
-	extensions.core_input_actionFilter.addAction(0, 'restrictions_competitive', false)
+	extensions.core_input_actionFilter.addAction(0, 'EventTools_competitive', false)
 	compModeState = false
 end
 
@@ -113,17 +119,17 @@ M.setSpeedLimit = function(data)
 	if data then
 		lastSpeedLimit = data
 	end
-	be:queueAllObjectLua("if restrictions then restrictions.speedLimitChange(" .. lastSpeedLimit .. ") end")
+	be:queueAllObjectLua("if EventTools then EventTools.speedLimitChange(" .. lastSpeedLimit .. ") end")
 end
 
 M.enableSpeedLimit = function()
 	speedLimitStatus = true
-	be:queueAllObjectLua("if restrictions then restrictions.enableSpeedLimit() end")
+	be:queueAllObjectLua("if EventTools then EventTools.enableSpeedLimit() end")
 end
 
 M.disableSpeedLimit = function()
 	speedLimitStatus = false
-	be:queueAllObjectLua("if restrictions then restrictions.disableSpeedLimit() end")
+	be:queueAllObjectLua("if EventTools then EventTools.disableSpeedLimit() end")
 end
 
 M.flipEnable = function()
@@ -162,19 +168,19 @@ end
 
 M.enableVehicleSelector = function()
 	vehicleSelectorUICheckState = true
-	extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", true)
+	extensions.core_input_actionFilter.addAction(0, "EventTools_vsel", true)
 end
 
 M.disableVehicleSelector = function()
 	vehicleSelectorUICheckState = false
-	extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", false)
+	extensions.core_input_actionFilter.addAction(0, "EventTools_vsel", false)
 end
 
 M.setTimeOfTheDay = function(data)
 	if data then
 		local decoded = type(data) == "string" and jsonDecode(data) or data
-		if decoded and decoded.hour and decoded.minute then
-			convertClockTimeToBeamNGTime(decoded.hour, decoded.minute)
+		if decoded and decoded.hour and decoded.minute and decoded.state then
+			convertClockTimeToBeamNGTime(decoded.hour, decoded.minute, decoded.state)
 		end
 	end
 end
@@ -224,13 +230,13 @@ M.setTag = function(data)
 end
 
 M.toggleNames = function(data)
-	if data == "true" and not toggleNames then
+	if data == "true" and not toggleNamesState then
 		MPVehicleGE.toggleNicknames()
-		toggleNames = true
+		toggleNamesState = true
 		print("Nametags hidden")
-	elseif data == "false" and toggleNames then
+	elseif data == "false" and toggleNamesState then
 		MPVehicleGE.toggleNicknames()
-		toggleNames = false
+		toggleNamesState = false
 		print("Nametags not hidden")
 	end
 end
@@ -314,13 +320,25 @@ M.popup = function(data)
 	guihooks.trigger('ConfirmationDialogOpen', "Message", data, "OK", "guihooks.trigger('ConfirmationDialogClose', 'Message')")
 end
 
+M.printCmd = function(data)
+	local fixed = data:gsub("%[%[NL%]%]", "\n")
+	guihooks.trigger('ConfirmationDialogOpen', "Info", fixed, "OK", "guihooks.trigger('ConfirmationDialogClose', 'Message')")
+end
+
+M.resetchat = function(data)
+	be:executeJS('localStorage.removeItem("chatMessages");')
+	reloadUI()
+end
+
 
 -- ----------------------------------------------------------------------------
 -- Game Events
 M.onUpdate = function(dt)
 	if M.routine1Sec:stop() > 1000 then
 		if editor.isEditorActive() then editor.setEditorActive(false) end
-		
+		if lastSetTime ~= 0 and core_environment.getTimeOfDay() and core_environment.getTimeOfDay().time ~= lastSetTime then
+			core_environment.setTimeOfDay({time = lastSetTime, play = false})
+		end
 		M.routine1Sec:stopAndReset()
 	end
 end
@@ -360,35 +378,37 @@ M.onVehicleResetted = function()
 	end
 end
 
-M.onClientPostStartMission = function()
+M.onExtensionLoaded = function()
 	if isBeamMPSession() then
-		extensions.core_input_actionFilter.setGroup("restrictions_competitive", {"vehicledebugMenu","toggleRadialMenuMulti","recover_vehicle","reset_physics","reset_all_physics","recover_vehicle_alt","recover_to_last_road","parts_selector","reload_vehicle","reload_all_vehicles","loadHome","saveHome","dropPlayerAtCamera","dropPlayerAtCameraNoReset","toggleConsoleNG","goto_checkpoint","toggleConsole","nodegrabberAction","nodegrabberGrab","nodegrabberRender","editorToggle","objectEditorToggle","editorSafeModeToggle","pause","slower_motion","faster_motion","toggle_slow_motion","toggleTraffic","toggleAITraffic","forceField","funBoom","funBreak","funExtinguish","funFire","funHinges","funTires","funRandomTire"})
-		core_input_actionFilter.addAction(0, "restrictions_competitive", false)
-		extensions.core_input_actionFilter.setGroup("restrictions_vsel", {"vehicle_selector"})
-		core_input_actionFilter.addAction(0, "restrictions_vsel", false)
+		extensions.core_input_actionFilter.setGroup("EventTools_competitive", {"vehicledebugMenu","toggleRadialMenuMulti","recover_vehicle","reset_physics","reset_all_physics","recover_vehicle_alt","recover_to_last_road","parts_selector","reload_vehicle","reload_all_vehicles","loadHome","saveHome","dropPlayerAtCamera","dropPlayerAtCameraNoReset","toggleConsoleNG","goto_checkpoint","toggleConsole","nodegrabberAction","nodegrabberGrab","nodegrabberRender","editorToggle","objectEditorToggle","editorSafeModeToggle","pause","slower_motion","faster_motion","toggle_slow_motion","toggleTraffic","toggleAITraffic","forceField","funBoom","funBreak","funExtinguish","funFire","funHinges","funTires","funRandomTire"})
+		core_input_actionFilter.addAction(0, "EventTools_competitive", false)
+		extensions.core_input_actionFilter.setGroup("EventTools_vsel", {"vehicle_selector"})
+		core_input_actionFilter.addAction(0, "EventTools_vsel", false)
 		
-		AddEventHandler("restrictions_enableCompetitiveMode", M.enableCompetitiveMode)
-		AddEventHandler("restrictions_disableCompetitiveMode", M.disableCompetitiveMode)
-		AddEventHandler("restrictions_resetAllOwnedVehicles", M.resetAllOwnedVehicles)
-		AddEventHandler("restrictions_enablePartSelectorOld", M.enablepartselectorold)
-		AddEventHandler("restrictions_disablePartSelectorOld", M.disablepartselectorold)
-		AddEventHandler("restrictions_enablePartSelector", M.enablepartselector)
-		AddEventHandler("restrictions_disablePartSelector", M.disablepartselector)
-		AddEventHandler("restrictions_setSpeedLimit", M.setSpeedLimit)
-		AddEventHandler("restrictions_enableSpeedLimit", M.enableSpeedLimit)
-		AddEventHandler("restrictions_disableSpeedLimit", M.disableSpeedLimit)
-		AddEventHandler("restrictions_flipEnable", M.flipEnable)
-		AddEventHandler("restrictions_freezeVehicleEnable", M.freezeVehicleEnable)
-		AddEventHandler("restrictions_freezeVehicleDisable", M.freezeVehicleDisable)
-		AddEventHandler("restrictions_enableVehicleSelector", M.enableVehicleSelector)
-		AddEventHandler("restrictions_disableVehicleSelector", M.disableVehicleSelector)
-		AddEventHandler("restrictions_setTimeOfTheDay", M.setTimeOfTheDay)
-		AddEventHandler("restrictions_setTag", M.setTag)
-		AddEventHandler("restrictions_setsuffix", M.setsuffix)
-		AddEventHandler("restrictions_setprefix", M.setprefix)
-		AddEventHandler("restrictions_cleartag", M.cleartag)
-		AddEventHandler("restrictions_toggleNames", M.toggleNames)
-		AddEventHandler("restrictions_popup", M.popup)
+		AddEventHandler("EventTools_enableCompetitiveMode", M.enableCompetitiveMode)
+		AddEventHandler("EventTools_disableCompetitiveMode", M.disableCompetitiveMode)
+		AddEventHandler("EventTools_resetAllOwnedVehicles", M.resetAllOwnedVehicles)
+		AddEventHandler("EventTools_enablePartSelectorOld", M.enablepartselectorold)
+		AddEventHandler("EventTools_disablePartSelectorOld", M.disablepartselectorold)
+		AddEventHandler("EventTools_enablePartSelector", M.enablepartselector)
+		AddEventHandler("EventTools_disablePartSelector", M.disablepartselector)
+		AddEventHandler("EventTools_setSpeedLimit", M.setSpeedLimit)
+		AddEventHandler("EventTools_enableSpeedLimit", M.enableSpeedLimit)
+		AddEventHandler("EventTools_disableSpeedLimit", M.disableSpeedLimit)
+		AddEventHandler("EventTools_flipEnable", M.flipEnable)
+		AddEventHandler("EventTools_freezeVehicleEnable", M.freezeVehicleEnable)
+		AddEventHandler("EventTools_freezeVehicleDisable", M.freezeVehicleDisable)
+		AddEventHandler("EventTools_enableVehicleSelector", M.enableVehicleSelector)
+		AddEventHandler("EventTools_disableVehicleSelector", M.disableVehicleSelector)
+		AddEventHandler("EventTools_setTimeOfTheDay", M.setTimeOfTheDay)
+		AddEventHandler("EventTools_setTag", M.setTag)
+		AddEventHandler("EventTools_setsuffix", M.setsuffix)
+		AddEventHandler("EventTools_setprefix", M.setprefix)
+		AddEventHandler("EventTools_cleartag", M.cleartag)
+		AddEventHandler("EventTools_toggleNames", M.toggleNames)
+		AddEventHandler("EventTools_popup", M.popup)
+		AddEventHandler("EventTools_printcmd", M.printCmd)
+		AddEventHandler("EventTools_resetchat", M.resetchat)
 	else
 		M.onUpdate = nil
 	end
@@ -397,10 +417,10 @@ end
 M.onWorldReadyState = function(state)
 	if state == 2 then
 		if isBeamMPSession() and compModeState then		
-			extensions.core_input_actionFilter.addAction(0, 'restrictions_competitive', true)
+			extensions.core_input_actionFilter.addAction(0, 'EventTools_competitive', true)
 		end
 		if isBeamMPSession() and vehicleSelectorUICheckState then		
-			extensions.core_input_actionFilter.addAction(0, "restrictions_vsel", true)
+			extensions.core_input_actionFilter.addAction(0, "EventTools_vsel", true)
 		end
 	end
 end
